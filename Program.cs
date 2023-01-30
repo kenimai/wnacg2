@@ -9,7 +9,11 @@ using System.Web;
 using Newtonsoft.Json;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-
+using System.Threading.Tasks;
+using System.Net.Http;
+using System.Collections.Generic;
+using static System.Net.Mime.MediaTypeNames;
+using System.Net.Http.Headers;
 
 namespace wnacg2
 {
@@ -131,14 +135,6 @@ namespace wnacg2
 
                     DataJson = "{ \"DownloadImages\" : " + DataJson + "}";
 
-                    //寫入TXT
-                    /*
-                    string TxtFile = FilePath + DataNumber + ".txt";
-                    StreamWriter sw = new StreamWriter(TxtFile, false, Encoding.UTF8);
-                    sw.WriteLine(DataJson);
-                    sw.Close();
-                    */
-
                     if (DataJson.Length > 0)
                     {
                         //移除不合法字元
@@ -162,7 +158,8 @@ namespace wnacg2
                         {
                             dynamic DI = JsonConvert.DeserializeObject(DataJson);
 
-                            int ImgCount = 1;
+                            //建立下載Task
+                            List<Task> listOfTasks = new List<Task>();
 
                             foreach (var img in DI.DownloadImages)
                             {
@@ -192,25 +189,25 @@ namespace wnacg2
                                     }
                                     else
                                     {
-                                        using (WebClient DataClient = new WebClient())
-                                        {
-                                            try
-                                            {
-                                                DataClient.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 6.1; Trident/7.0; rv:11.0) like Gecko");
-
-                                                DataClient.DownloadFile(DownloadImagesUrl, MainDownloadFile);
-
-                                                Console.WriteLine("下載 : " + DownloadImagesUrl + " [" + ImgCount + "]");
-
-                                                ImgCount += 1;
-                                            }
-                                            catch
-                                            {
-                                                Console.WriteLine("下載失敗 : " + DownloadImagesUrl + " [" + ImgCount + "]");
-                                            }
-                                        }
+                                        listOfTasks.Add(DownloadImage(DownloadImagesUrl, MainDownloadFile));
                                     }
                                 }
+                            }
+
+                            Task t = Task.WhenAll(listOfTasks);
+
+                            try
+                            {
+                                t.Wait();
+                            }
+                            catch
+                            {
+
+                            }
+
+                            if (t.Status == TaskStatus.RanToCompletion)
+                            {
+                                Console.WriteLine("全部下載完成");
                             }
                         }
                     }
@@ -219,6 +216,24 @@ namespace wnacg2
 
             Console.Write("Press any key to close the app...");
             Console.ReadKey();
+        }
+
+        public static async Task DownloadImage(string DLImageUrl, string DLImageFile)
+        {
+            Console.WriteLine("下載檔案 : " + DLImageUrl + " [" + DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss:fff") + "]");
+
+            using (HttpClient client = new HttpClient())
+            {
+                using (var stream = await client.GetStreamAsync(DLImageUrl))
+                {
+                    using (var fileStream = new FileStream(DLImageFile, FileMode.CreateNew))
+                    {
+                        await stream.CopyToAsync(fileStream);
+
+                        Console.WriteLine("下載完成 : " + DLImageUrl + " [" + DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss:fff") + "]");
+                    }
+                }
+            }
         }
     }
 }
